@@ -1,0 +1,18 @@
+{
+  "job_id": "cd34916f-d353-498b-bb56-e82032ea3e48",
+  "status": "COMPLETED",
+  "result": [
+    {
+      "uri": "https://ehkultura.wikibase.cloud/entity/Q24903",
+      "matches": [
+        {
+          "url": "http://en.wikipedia.org/wiki/Brian_O%27Doherty",
+          "wikidata_item_id": "Q3777954",
+          "title": "Brian O'Doherty",
+          "score": 1.0
+        }
+      ]
+    }
+  ],
+  "error": null
+}
