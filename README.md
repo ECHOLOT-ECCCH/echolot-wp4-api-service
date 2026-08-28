@@ -122,3 +122,59 @@ curl -s http://localhost:8000/jobs/<job_id> | jq .status
 # Fetch result
 curl -s http://localhost:8000/jobs/<job_id>/result | jq .
 ```
+
+## Docker API without Prefect
+
+The Docker image runs a separate synchronous API on port 5000. It accepts one entity per request, returns the result immediately, and does not install or start Prefect. The original Prefect API above is unchanged.
+
+### Start
+
+1. Create `.env` if needed and set the Wikifier key:
+
+```bash
+cp .env.example .env
+```
+
+2. Generate the API key stored in `.env`:
+
+```bash
+sed -i "s/^API_KEY=.*/API_KEY=$(openssl rand -hex 32)/" .env
+```
+
+3. Build and start the container:
+
+```bash
+docker compose up --build -d
+```
+
+4. Check the service:
+
+```bash
+docker compose ps
+curl --fail http://localhost:5000/health
+```
+
+The API documentation is available at <http://localhost:5000/docs>. View logs with `docker compose logs -f` and stop it with `docker compose down`.
+
+### Reconcile one entity
+
+Load the API key from `.env` and send a single entity object:
+
+```bash
+set -a
+. ./.env
+set +a
+
+curl --fail-with-body --silent --show-error \
+  -X POST http://localhost:5000/reconcile \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: $API_KEY" \
+  --data @examples/single_entity.json
+```
+
+To run the image without Compose:
+
+```bash
+docker build -t echolot-reconciliation .
+docker run --env-file .env -p 5000:5000 echolot-reconciliation
+```

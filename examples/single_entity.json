@@ -1,0 +1,12 @@
+{
+  "uri": "https://example.org/entity/albert-einstein",
+  "name": "Albert Einstein",
+  "entity_type": "person",
+  "identifiers": {
+    "wikidata": "http://www.wikidata.org/entity/Q937"
+  },
+  "information": {
+    "birth_year": "1879"
+  },
+  "context": "Albert Einstein developed the theory of relativity and received the Nobel Prize in Physics."
+}
