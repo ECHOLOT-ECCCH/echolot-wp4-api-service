@@ -178,3 +178,70 @@ To run the image without Compose:
 docker build -t echolot-reconciliation .
 docker run --env-file .env -p 5000:5000 echolot-reconciliation
 ```
+
+### Enrich a Wikidata item from a Wikipedia page
+
+`POST /enrich` takes a Wikidata item and a Wikipedia article about the same subject. It reads the item's current statements and the properties Wikidata expects for its type (`instance of` → `properties for this type`), then asks an LLM to propose values found in the article. Nothing is written to Wikidata; the response is a list of suggestions for a person to review.
+
+Set the LLM key in `.env` (only Anthropic is implemented so far):
+
+```
+ANTHROPIC_API_KEY=...
+LLM_PROVIDER=anthropic      # optional, default
+LLM_MODEL=claude-opus-5     # optional, default
+```
+
+Optional: `LLM_EFFORT` (`low`, `medium`, `high`, `xhigh` or `max`; default `high`), `LLM_REFUSAL_FALLBACK` (default on: a request the model declines on safety grounds is re-run server-side on Anthropic's recommended fallback model; set to `off` to get a plain `502` instead) and `WIKIMEDIA_USER_AGENT` (sent to the Wikimedia APIs; set it to something that identifies your deployment).
+
+```bash
+curl --fail-with-body --silent --show-error \
+  -X POST http://localhost:5000/enrich \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: $API_KEY" \
+  --data @examples/enrich_request.json
+```
+
+**Request** — `wikidata_id` may be a bare id or a full entity URL; the Wikipedia URL supplies the language and title.
+```json
+{
+  "wikidata_id": "Q937",
+  "wikipedia_url": "https://en.wikipedia.org/wiki/Albert_Einstein"
+}
+```
+
+**Response** (abridged)
+```json
+{
+  "wikidata_id": "Q937",
+  "label": "Albert Einstein",
+  "description": "German-born theoretical physicist (1879–1955)",
+  "wikipedia_url": "https://en.wikipedia.org/wiki/Albert_Einstein",
+  "wikipedia_title": "Albert Einstein",
+  "instance_of": [{"id": "Q5", "label": "human"}],
+  "candidate_source": "properties_for_this_type",
+  "candidate_properties": [
+    {"id": "P569", "label": "date of birth", "datatype": "time", "has_value": true}
+  ],
+  "suggestions": [
+    {
+      "property_id": "P19",
+      "property_label": "place of birth",
+      "datatype": "wikibase-item",
+      "value": "Ulm",
+      "status": "confirms",
+      "existing_values": ["Ulm (Q3012)"],
+      "evidence": "Einstein was born in Ulm, in the Kingdom of Württemberg ...",
+      "confidence": 0.97,
+      "note": null
+    }
+  ],
+  "model": "claude-opus-5",
+  "usage": {"input_tokens": 24000, "output_tokens": 1800}
+}
+```
+
+Each suggestion has a `status`: `new` (the property is empty, or this is an additional value), `confirms` (matches an existing value) or `conflict` (contradicts one). `evidence` is a verbatim quote from the article. Suggestions are ordered `new`, then `conflict`, then `confirms`, by confidence within each group. External-identifier properties are ignored, since prose does not carry them. When the item's type has no `properties for this type` list, `candidate_source` is `free` and the LLM may propose any property.
+
+Errors: `503` when no LLM key is configured, `422` for a malformed id or URL, `404` when the item or page does not exist, `502` when Wikidata, Wikipedia or the LLM fail.
+
+To add another LLM provider, implement the `LLMProvider` protocol in [reconciliation/enrichment/llm.py](reconciliation/enrichment/llm.py) and register it in `get_provider`.

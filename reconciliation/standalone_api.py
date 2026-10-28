@@ -9,6 +9,10 @@ from fastapi.security import APIKeyHeader
 from pydantic import BaseModel
 
 from reconciliation.algorithms.wikifier import reconcile
+from reconciliation.enrichment.llm import LLMError, LLMNotConfigured, get_provider
+from reconciliation.enrichment.models import EnrichmentRequest, EnrichmentResult
+from reconciliation.enrichment.service import enrich
+from reconciliation.enrichment.wikimedia import NotFound, UpstreamError
 from reconciliation.models import Entity, ReconciliationMatch
 
 logger = logging.getLogger(__name__)
@@ -63,3 +67,37 @@ def reconcile_entity(entity: Entity) -> EntityResult:
         ) from exc
 
     return EntityResult(uri=entity.uri, matches=result.matches)
+
+
+@app.post(
+    "/enrich",
+    response_model=EnrichmentResult,
+    dependencies=[Security(require_api_key)],
+)
+def enrich_entity(request: EnrichmentRequest) -> EnrichmentResult:
+    try:
+        provider = get_provider()
+    except LLMNotConfigured as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"LLM is not configured: {exc}",
+        ) from exc
+
+    try:
+        return enrich(request, provider)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)) from exc
+    except NotFound as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc)) from exc
+    except LLMError as exc:
+        logger.exception("LLM request failed for %s", request.wikidata_id)
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"LLM request failed: {exc}",
+        ) from exc
+    except (TimeoutError, URLError, UpstreamError, json.JSONDecodeError, KeyError) as exc:
+        logger.exception("Wikimedia request failed for %s", request.wikidata_id)
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Wikidata or Wikipedia request failed",
+        ) from exc
