@@ -7,7 +7,8 @@ import urllib.request
 
 # Wikimedia asks API clients to identify themselves; override with WIKIMEDIA_USER_AGENT.
 DEFAULT_USER_AGENT = (
-    "ECHOLOT-reconciliation/0.1 (https://github.com/pzajec/ECHOLOT-reconciliation)"
+    "echolot-wp4-api-service/0.1 "
+    "(https://github.com/ECHOLOT-ECCCH/echolot-wp4-api-service)"
 )
 TIMEOUT_SECONDS = 30
 

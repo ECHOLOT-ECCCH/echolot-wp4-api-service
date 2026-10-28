@@ -175,8 +175,8 @@ curl --fail-with-body --silent --show-error \
 To run the image without Compose:
 
 ```bash
-docker build -t echolot-reconciliation .
-docker run --env-file .env -p 5000:5000 echolot-reconciliation
+docker build -t echolot-wp4-api-service .
+docker run --env-file .env -p 5000:5000 echolot-wp4-api-service
 ```
 
 ### Enrich a Wikidata item from a Wikipedia page
