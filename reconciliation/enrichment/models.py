@@ -10,6 +10,15 @@ class EnrichmentRequest(BaseModel):
         description="Item id such as 'Q937' or an entity URL such as http://www.wikidata.org/entity/Q937"
     )
     wikipedia_url: str = Field(description="Article URL such as https://en.wikipedia.org/wiki/Albert_Einstein")
+    provider: Literal["anthropic"] | None = Field(
+        default=None, description="LLM provider. Defaults to the server's configured provider"
+    )
+    model: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=100,
+        description="Model id such as 'claude-opus-5-5'. Requires your own key in the X-LLM-API-Key header",
+    )
 
 
 class LabeledId(BaseModel):

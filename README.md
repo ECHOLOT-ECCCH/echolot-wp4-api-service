@@ -183,15 +183,15 @@ docker run --env-file .env -p 5000:5000 echolot-wp4-api-service
 
 `POST /enrich` takes a Wikidata item and a Wikipedia article about the same subject. It reads the item's current statements and the properties Wikidata expects for its type (`instance of` → `properties for this type`), then asks an LLM to propose values found in the article. Nothing is written to Wikidata; the response is a list of suggestions for a person to review.
 
-Set the LLM key in `.env` (only Anthropic is implemented so far):
+Set the server's LLM key in `.env` (only Anthropic is implemented so far). Callers can also send their own, as described below; leave `ANTHROPIC_API_KEY` unset to require that.
 
 ```
-ANTHROPIC_API_KEY=...
+ANTHROPIC_API_KEY=...       # optional if every caller brings their own key
 LLM_PROVIDER=anthropic      # optional, default
 LLM_MODEL=claude-opus-5     # optional, default
 ```
 
-Optional: `LLM_EFFORT` (`low`, `medium`, `high`, `xhigh` or `max`; default `high`), `LLM_REFUSAL_FALLBACK` (default on: a request the model declines on safety grounds is re-run server-side on Anthropic's recommended fallback model; set to `off` to get a plain `502` instead) and `WIKIMEDIA_USER_AGENT` (sent to the Wikimedia APIs; set it to something that identifies your deployment).
+Optional: `LLM_EFFORT` (`low`, `medium`, `high`, `xhigh` or `max`; default `high`), `LLM_REFUSAL_FALLBACK` (default on: on models that support it, a request the model declines on safety grounds is re-run server-side on Anthropic's recommended fallback model; set to `off` to get a plain `502` instead) and `WIKIMEDIA_USER_AGENT` (sent to the Wikimedia APIs; set it to something that identifies your deployment).
 
 ```bash
 curl --fail-with-body --silent --show-error \
@@ -201,13 +201,30 @@ curl --fail-with-body --silent --show-error \
   --data @examples/enrich_request.json
 ```
 
-**Request** — `wikidata_id` may be a bare id or a full entity URL; the Wikipedia URL supplies the language and title.
+**Request** — `wikidata_id` may be a bare id or a full entity URL; the Wikipedia URL supplies the language and title. `provider` and `model` are optional.
 ```json
 {
   "wikidata_id": "Q937",
-  "wikipedia_url": "https://en.wikipedia.org/wiki/Albert_Einstein"
+  "wikipedia_url": "https://en.wikipedia.org/wiki/Albert_Einstein",
+  "provider": "anthropic",
+  "model": "claude-opus-5-5"
 }
 ```
+
+**Using your own LLM key** — send it in the `X-LLM-API-Key` header, alongside `X-API-Key`:
+
+```bash
+curl --fail-with-body --silent --show-error \
+  -X POST https://your-host/enrich \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: $API_KEY" \
+  -H "X-LLM-API-Key: $ANTHROPIC_API_KEY" \
+  --data @examples/enrich_request.json
+```
+
+- Choosing a `model` requires your own key. Requests using the server's key always run on the server's `LLM_MODEL`.
+- The key is used for that request only. It is not stored, logged or returned.
+- Only send a real key over HTTPS, and never in the request body or URL. The service itself serves plain HTTP, so put a reverse proxy that provides TLS in front of it unless the caller is on the same machine.
 
 **Response** (abridged)
 ```json
@@ -242,6 +259,17 @@ curl --fail-with-body --silent --show-error \
 
 Each suggestion has a `status`: `new` (the property is empty, or this is an additional value), `confirms` (matches an existing value) or `conflict` (contradicts one). `evidence` is a verbatim quote from the article. Suggestions are ordered `new`, then `conflict`, then `confirms`, by confidence within each group. External-identifier properties are ignored, since prose does not carry them. When the item's type has no `properties for this type` list, `candidate_source` is `free` and the LLM may propose any property.
 
-Errors: `503` when no LLM key is configured, `422` for a malformed id or URL, `404` when the item or page does not exist, `502` when Wikidata, Wikipedia or the LLM fail.
+`model` in the response is the model that answered, which can differ from the one requested if a safety fallback ran.
+
+Errors:
+
+| Status | When |
+|---|---|
+| `401` | The service key is invalid, or Anthropic rejected the key in `X-LLM-API-Key` |
+| `404` | The item or page does not exist |
+| `422` | A malformed id or URL, an unknown `provider`, a `model` sent without your own key, or a request using your own key that Anthropic rejected (for example an unknown model) |
+| `429` | Anthropic's rate limit was reached |
+| `502` | Wikidata, Wikipedia or the LLM failed, including Anthropic rejecting the server's own key |
+| `503` | No LLM key is available from either the header or the server |
 
 To add another LLM provider, implement the `LLMProvider` protocol in [reconciliation/enrichment/llm.py](reconciliation/enrichment/llm.py) and register it in `get_provider`.

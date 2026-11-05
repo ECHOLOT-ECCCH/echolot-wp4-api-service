@@ -1,7 +1,7 @@
 """LLM provider abstraction.
 
 One implementation (Anthropic) for now. `get_provider` takes explicit overrides so a
-bring-your-own-key request header can be wired in later without touching callers.
+request can bring its own key and model.
 """
 
 import os
@@ -21,6 +21,11 @@ DEFAULT_EFFORT = "high"  # low | medium | high | xhigh | max
 MAX_OUTPUT_TOKENS = 16000  # the SDK's ceiling for a non-streaming request
 REQUEST_TIMEOUT_SECONDS = 300.0
 REFUSAL_FALLBACK_BETA = "server-side-fallback-2026-07-01"
+# Callers can choose any model, but only these are known to accept `fallbacks: "default"`.
+# Haiku 5.5, for one, has no server-side fallback.
+REFUSAL_FALLBACK_MODELS = frozenset(
+    {"claude-fable-5-1", "claude-opus-5-5", "claude-opus-5", "claude-sonnet-5-5"}
+)
 
 # JSON-schema keywords the structured-outputs API rejects. Pydantic emits some of them
 # (e.g. `default`); constraints like `minimum` would appear if a Field() ever adds them.
@@ -56,6 +61,18 @@ class LLMRefused(LLMError):
 
 class LLMTruncated(LLMError):
     """The output hit the token limit before completing."""
+
+
+class LLMKeyRejected(LLMError):
+    """The provider rejected the API key, or the key lacks permission."""
+
+
+class LLMRequestRejected(LLMError):
+    """The provider rejected the request, e.g. an unknown model or an unsupported option."""
+
+
+class LLMRateLimited(LLMError):
+    """The provider's rate limit was reached and the client's retries ran out."""
 
 
 class LLMProvider(Protocol):
@@ -100,7 +117,7 @@ class AnthropicProvider:
             },
         }
         try:
-            if self.refusal_fallback:
+            if self.refusal_fallback and self.model in REFUSAL_FALLBACK_MODELS:
                 # A safety-declined request is re-run server-side on Anthropic's
                 # recommended fallback model instead of coming back as a refusal.
                 response = self._client.beta.messages.create(
@@ -108,8 +125,17 @@ class AnthropicProvider:
                 )
             else:
                 response = self._client.messages.create(**params)
+        except (anthropic.AuthenticationError, anthropic.PermissionDeniedError) as exc:
+            raise LLMKeyRejected(f"Anthropic rejected the API key: {exc}") from exc
+        except (anthropic.BadRequestError, anthropic.NotFoundError) as exc:
+            raise LLMRequestRejected(f"Anthropic rejected the request: {exc}") from exc
+        except anthropic.RateLimitError as exc:
+            raise LLMRateLimited(f"Anthropic rate limit reached: {exc}") from exc
         except anthropic.APIError as exc:
             raise LLMError(f"Anthropic API error: {exc}") from exc
+
+        # Report the model that answered, which differs from the requested one after a fallback.
+        self.model = response.model
 
         if response.stop_reason == "refusal":
             details = response.stop_details
@@ -176,7 +202,7 @@ def get_provider(
     if provider_name == "anthropic":
         key = api_key or os.getenv("ANTHROPIC_API_KEY")
         if not key:
-            raise LLMNotConfigured("ANTHROPIC_API_KEY is not set")
+            raise LLMNotConfigured("send an X-LLM-API-Key header or set ANTHROPIC_API_KEY on the server")
         return AnthropicProvider(
             api_key=key,
             model=model,
