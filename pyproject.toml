@@ -1,15 +1,20 @@
 [project]
 name = "echolot-reconciliation"
 version = "0.1.0"
-description = "Entity reconciliation against Wikidata via Wikifier, orchestrated with Prefect"
+description = "Entity reconciliation against Wikidata (Wikifier, LLM-based or rule-based), orchestrated with Prefect"
 readme = "README.md"
 requires-python = ">=3.10"
 dependencies = [
     "anthropic>=1.8",
     "fastapi>=0.110",
+    "fuzzy>=1.2.2",
     "httpx>=0.27",
+    "openai>=1.0",
     "prefect>=3.7.5.dev5",
     "pydantic>=2.0",
     "python-dotenv>=1.0",
+    "requests>=2.31",
+    "textdistance>=4.6",
+    "tqdm>=4.66",
     "uvicorn[standard]>=0.27",
 ]

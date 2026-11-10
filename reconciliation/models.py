@@ -6,7 +6,8 @@ class Entity(BaseModel):
     name: str
     entity_type: str
     identifiers: dict[str, str] = {}
-    information: dict[str, str] = {}
+    # Lists occur in Echolot exports, e.g. several "publication" titles for one author.
+    information: dict[str, str | list[str]] = {}
     context: str = ""
 
 

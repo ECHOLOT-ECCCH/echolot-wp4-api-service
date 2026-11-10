@@ -2,13 +2,19 @@ import json
 import logging
 import os
 import secrets
+from typing import Annotated
 from urllib.error import URLError
 
-from fastapi import FastAPI, HTTPException, Security, status
+from fastapi import FastAPI, HTTPException, Query, Security, status
 from fastapi.security import APIKeyHeader
 from pydantic import BaseModel
 
-from reconciliation.algorithms.wikifier import reconcile
+from reconciliation.algorithms import (
+    DEFAULT_ALGORITHM,
+    AlgorithmName,
+    AlgorithmNotConfigured,
+    get_algorithm,
+)
 from reconciliation.enrichment.llm import LLMError, LLMNotConfigured, get_provider
 from reconciliation.enrichment.models import EnrichmentRequest, EnrichmentResult
 from reconciliation.enrichment.service import enrich
@@ -23,6 +29,7 @@ app = FastAPI(title="ECHOLOT Standalone Reconciliation API", version="0.1.0")
 
 class EntityResult(BaseModel):
     uri: str
+    algorithm: AlgorithmName
     matches: list[ReconciliationMatch]
 
 
@@ -50,23 +57,31 @@ def health() -> dict[str, str]:
     response_model=EntityResult,
     dependencies=[Security(require_api_key)],
 )
-def reconcile_entity(entity: Entity) -> EntityResult:
-    if not os.getenv("WIKIFIER_API_KEY"):
+def reconcile_entity(
+    entity: Entity,
+    algorithm: Annotated[
+        AlgorithmName, Query(description="Reconciliation approach to run")
+    ] = DEFAULT_ALGORITHM,
+) -> EntityResult:
+    implementation = get_algorithm(algorithm)
+    try:
+        implementation.check_configured()
+    except AlgorithmNotConfigured as exc:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Wikifier API key is not configured",
-        )
+            detail=f"Algorithm {algorithm.value} is not configured: {exc}",
+        ) from exc
 
     try:
-        result = reconcile(entity)
-    except (TimeoutError, URLError, json.JSONDecodeError, KeyError) as exc:
-        logger.exception("Wikifier request failed for %s", entity.uri)
+        result = implementation.reconcile(entity)
+    except implementation.UPSTREAM_ERRORS as exc:
+        logger.exception("%s request failed for %s", algorithm.value, entity.uri)
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail="Reconciliation service request failed",
         ) from exc
 
-    return EntityResult(uri=entity.uri, matches=result.matches)
+    return EntityResult(uri=entity.uri, algorithm=algorithm, matches=result.matches)
 
 
 @app.post(

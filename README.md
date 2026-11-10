@@ -1,13 +1,31 @@
 # ECHOLOT Reconciliation
 
-Async HTTP API for reconciling entities against Wikidata via the [Wikifier](http://wikifier.org) service, orchestrated with [Prefect](https://prefect.io).
+Async HTTP API for reconciling entities against Wikidata, orchestrated with [Prefect](https://prefect.io). Three interchangeable reconciliation algorithms are available, chosen per request with `?algorithm=`.
 
 ## Setup
 
 ```bash
 uv sync
-cp .env.example .env  # set WIKIFIER_API_KEY
+cp .env.example .env  # configure the algorithms you want to use, see below
 ```
+
+## Reconciliation algorithms
+
+| `algorithm` | How it works | Configuration | `score` |
+| --- | --- | --- | --- |
+| `wikifier` (default) | Annotates the entity's JSON with [Wikifier](http://wikifier.org) and keeps the annotations that cover the name. Returns Wikipedia URLs. | `WIKIFIER_API_KEY` | Wikifier's link confidence |
+| `llm_based` | From `draft/llm_based`: searches Wikidata for the name, describes the top 5 hits with SPARQL, and asks an OpenAI-compatible chat model (Latxa) which one, if any, is the same person. | `OPENAI_BASE_URL`, `OPENAI_API_KEY`, `OPENAI_MODEL`, `OPENAI_MAX_TOKENS`, `OPENAI_TEMPERATURE`, `OPENAI_TOP_P`, `OPENAI_STREAM` (all required) | Always `1.0`: the model picks one candidate or none |
+| `rule_based` | From `draft/rule_based`: matches people against a local TSV dump of Wikidata or Getty ULAN using Soundex blocking, biographical rules and Jaro-Winkler name similarity. | `RULE_BASED_TARGET_FILE`, the path to the TSV | The draft's normalised score, 0.9–1 |
+
+Each algorithm returns the same result shape. `llm_based` and `rule_based` return Wikidata entity URLs (`http://www.wikidata.org/entity/Q…`). A `rule_based` match against a ULAN row with no Wikidata link returns the ULAN URL and `"wikidata_item_id": null`.
+
+The draft implementations are included in [reconciliation/algorithms/llm_based/](reconciliation/algorithms/llm_based/) and [reconciliation/algorithms/rule_based/](reconciliation/algorithms/rule_based/) as copies of the draft files. `ruleBasedMatcher.py` is unchanged. In llm_based, the only change is that the files import each other with relative imports (`from .config import ...`), which they need to work inside a package. Each package's `__init__.py` is an adapter that converts between this API's entities and results and the drafts' formats. To update from a newer draft, copy the files again and re-apply those three import edits.
+
+Notes:
+- `rule_based` passes each entity through the draft's own Echolot JSON reader (`RuleBasedMatcher.match_file`). That reader matches only `entity_type: "person"` and uses the name, `information.gender` and `identifiers.wikidata`; other `information` fields, such as `birth_year`, are not used.
+- `rule_based` indexes the datasheet in memory on first use in each process, and later requests reuse the index. `draft/rule_based/datasheets/ulan.tsv` (291k people) takes about 4 s and 0.2 GB. The full Wikidata dump (`wikidata.tsv.zip`, 5.9M people; unzip it first) takes about 80 s and 3.8 GB. Under Prefect, every job is a new process, so the index is rebuilt once per job.
+- `llm_based` makes six Wikidata requests and one model call per entity. Prompts are the same as the draft's batch driver (`obtain_ids_from_wikidata`) produces, but the driver's 6 s pause between entities is not applied. The Prefect flow processes entities concurrently, so large batches can hit Wikidata rate limits, and failed lookups yield no match rather than an error.
+- **Known issue (draft dependency):** `rule_based` uses `fuzzy` 1.2.2 for Soundex. On Python 3 that package reads its code table from freed memory, so blocking keys vary between processes. The same query on the same datasheet can match in one run and not in the next. This comes from the draft as it is and needs fixing there.
 
 ## Running
 
@@ -35,6 +53,7 @@ Submit the sample input and poll until complete:
 ```bash
 uv run python run_job.py              # uses examples/in.json, saves to out.json
 uv run python run_job.py my_input.json my_output.json
+uv run python run_job.py my_input.json my_output.json rule_based
 ```
 
 ## API
@@ -42,10 +61,10 @@ uv run python run_job.py my_input.json my_output.json
 ### Submit a reconciliation job
 
 ```
-POST /reconcile
+POST /reconcile?algorithm=wikifier|llm_based|rule_based
 ```
 
-Accepts a list of entities and returns a job ID immediately. Reconciliation runs in the background.
+Accepts a list of entities and returns a job ID immediately. Reconciliation runs in the background. `algorithm` defaults to `wikifier`. An unknown name returns `422`. A job whose algorithm is not configured fails, and its `error` names the missing setting.
 
 **Request**
 ```json
@@ -71,7 +90,8 @@ Accepts a list of entities and returns a job ID immediately. Reconciliation runs
 ```json
 {
   "job_id": "3f2e1a4b-...",
-  "status": "SCHEDULED"
+  "status": "SCHEDULED",
+  "algorithm": "wikifier"
 }
 ```
 
@@ -93,25 +113,29 @@ Returns `null` for `result` if the job is not yet complete. If an individual ent
 
 ## Adding a new reconciliation algorithm
 
-1. Create `reconciliation/algorithms/<name>.py` and implement:
+1. Create `reconciliation/algorithms/<name>.py` (or a `<name>/` package) that defines:
    ```python
+   from reconciliation.algorithms import AlgorithmNotConfigured
    from reconciliation.models import Entity, ReconciliationMatch, ReconciliationResult
+
+   # Exception types meaning a remote service failed; the standalone API answers 502.
+   UPSTREAM_ERRORS: tuple[type[Exception], ...] = ()
+
+   def check_configured() -> None:
+       """Raise AlgorithmNotConfigured if a key, endpoint or data file is missing."""
 
    def reconcile(entity: Entity) -> ReconciliationResult:
        ...
    ```
 
-2. Swap the import in [reconciliation/flows.py](reconciliation/flows.py):
-   ```python
-   from reconciliation.algorithms.<name> import reconcile
-   ```
+2. Register it in [reconciliation/algorithms/\_\_init\_\_.py](reconciliation/algorithms/__init__.py): add a member to `AlgorithmName` and its module path to `_MODULES`.
 
-That's it — the Prefect flow, API, and models are all algorithm-agnostic.
+Both APIs, the Prefect flow and the models are algorithm-agnostic. Modules are imported only when they are selected, so an algorithm's dependencies and configuration don't affect the others.
 
 ## curl examples
 
 ```bash
-# Submit
+# Submit (add ?algorithm=llm_based or ?algorithm=rule_based to switch)
 curl -s -X POST http://localhost:8000/reconcile \
   -H "Content-Type: application/json" \
   -d @examples/in.json | jq .
@@ -129,11 +153,13 @@ The Docker image runs a separate synchronous API on port 5000. It accepts one en
 
 ### Start
 
-1. Create `.env` if needed and set the Wikifier key:
+1. Create `.env` if needed and configure the algorithms you want (see [Reconciliation algorithms](#reconciliation-algorithms)):
 
 ```bash
 cp .env.example .env
 ```
+
+The rule-based datasheets are not part of the image. For `rule_based`, the datasheet must be visible inside the container. Uncomment the `volumes` entry in `docker-compose.yml` and set `RULE_BASED_TARGET_FILE=/data/ulan.tsv` (or `/data/wikidata.tsv` after unzipping it, which needs about 4 GB of memory) in `.env`.
 
 2. Generate the API key stored in `.env`:
 
@@ -166,11 +192,13 @@ set -a
 set +a
 
 curl --fail-with-body --silent --show-error \
-  -X POST http://localhost:5000/reconcile \
+  -X POST "http://localhost:5000/reconcile?algorithm=rule_based" \
   -H "Content-Type: application/json" \
   -H "X-API-Key: $API_KEY" \
   --data @examples/single_entity.json
 ```
+
+`algorithm` works as in the Prefect API and defaults to `wikifier`. The response is `{"uri": ..., "algorithm": ..., "matches": [...]}`. Errors: `503` when the chosen algorithm is not configured, `502` when Wikifier or the LLM endpoint fails, `422` for an unknown algorithm. The first `rule_based` request in a fresh container waits while the datasheet is indexed.
 
 To run the image without Compose:
 
