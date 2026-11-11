@@ -18,3 +18,12 @@ dependencies = [
     "tqdm>=4.66",
     "uvicorn[standard]>=0.27",
 ]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.2.0",
+]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]

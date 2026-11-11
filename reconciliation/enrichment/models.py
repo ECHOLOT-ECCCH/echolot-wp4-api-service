@@ -69,3 +69,68 @@ class LLMSuggestion(BaseModel):
 
 class LLMSuggestionList(BaseModel):
     suggestions: list[LLMSuggestion]
+
+
+# --- POST /wikidata/statements: what Wikidata holds for items, for scripts that enrich a dataset.
+
+
+class StatementsRequest(BaseModel):
+    ids: list[str] = Field(
+        min_length=1,
+        max_length=50,
+        description="Item ids such as 'Q937' or entity URLs such as http://www.wikidata.org/entity/Q937",
+    )
+    properties: list[str] | None = Field(
+        default=None,
+        description="Property ids such as 'P569'. Omitted or empty: every property of each item, "
+        "with a count and one example value",
+    )
+    lang: str = Field(
+        default="en",
+        pattern=r"^[a-z]{2,3}(-[a-z0-9]+)*$",
+        description="Language of labels; falls back to English, then to labels shared by all languages",
+    )
+
+
+class StatementValue(BaseModel):
+    text: str = Field(description="The value as short readable text")
+    rank: Literal["preferred", "normal"]
+    id: str | None = Field(default=None, description="The QID (or other entity id) of an item value")
+    label: str | None = Field(default=None, description="The label of an item value")
+    time: str | None = Field(default=None, description="Wikidata's time string, e.g. '+1881-10-25T00:00:00Z'")
+    precision: int | None = Field(
+        default=None, description="Of a time: 11 day, 10 month, 9 year, 8 decade, 7 century"
+    )
+    calendar: Literal["gregorian", "julian"] | None = None
+    amount: str | None = Field(default=None, description="Of a quantity, without a leading '+'")
+    unit: str | None = Field(default=None, description="The QID of a quantity's unit")
+    unit_label: str | None = None
+    language: str | None = Field(default=None, description="Of a monolingual text")
+    latitude: float | None = None
+    longitude: float | None = None
+
+
+class PropertyStatements(BaseModel):
+    property: str
+    label: str | None = None
+    datatype: str | None = None
+    count: int = Field(description="Number of non-deprecated values")
+    values: list[StatementValue] = Field(
+        description="Preferred values first. All of them when properties were asked for, "
+        "otherwise the first one only"
+    )
+
+
+class ItemStatements(BaseModel):
+    requested: str = Field(description="The id or URL as sent")
+    found: bool
+    id: str | None = Field(default=None, description="The item's QID, after following a redirect")
+    label: str | None = None
+    description: str | None = None
+    statements: list[PropertyStatements] = []
+
+
+class StatementsResult(BaseModel):
+    lang: str
+    summary: bool = Field(description="True when no properties were asked for")
+    items: list[ItemStatements]

@@ -16,8 +16,14 @@ from reconciliation.algorithms import (
     get_algorithm,
 )
 from reconciliation.enrichment.llm import LLMError, LLMNotConfigured, get_provider
-from reconciliation.enrichment.models import EnrichmentRequest, EnrichmentResult
+from reconciliation.enrichment.models import (
+    EnrichmentRequest,
+    EnrichmentResult,
+    StatementsRequest,
+    StatementsResult,
+)
 from reconciliation.enrichment.service import enrich
+from reconciliation.enrichment.statements import statements
 from reconciliation.enrichment.wikimedia import NotFound, UpstreamError
 from reconciliation.models import Entity, ReconciliationMatch
 
@@ -115,4 +121,23 @@ def enrich_entity(request: EnrichmentRequest) -> EnrichmentResult:
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail="Wikidata or Wikipedia request failed",
+        ) from exc
+
+
+@app.post(
+    "/wikidata/statements",
+    response_model=StatementsResult,
+    response_model_exclude_none=True,
+    dependencies=[Security(require_api_key)],
+)
+def wikidata_statements(request: StatementsRequest) -> StatementsResult:
+    try:
+        return statements(request)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)) from exc
+    except (TimeoutError, URLError, UpstreamError, json.JSONDecodeError, KeyError) as exc:
+        logger.exception("Wikidata request failed for %s", request.ids)
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Wikidata request failed",
         ) from exc

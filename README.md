@@ -273,3 +273,62 @@ Each suggestion has a `status`: `new` (the property is empty, or this is an addi
 Errors: `503` when no LLM key is configured, `422` for a malformed id or URL, `404` when the item or page does not exist, `502` when Wikidata, Wikipedia or the LLM fail.
 
 To add another LLM provider, implement the `LLMProvider` protocol in [reconciliation/enrichment/llm.py](reconciliation/enrichment/llm.py) and register it in `get_provider`.
+
+### Wikidata statements for items
+
+`POST /wikidata/statements` returns what Wikidata holds for up to 50 items, as values a script can use: item values with their QID and label, dates at their precision, quantities with their unit. It is meant for enriching a dataset whose records have (or have been reconciled to) a QID. Without `properties` it lists every property of each item with a count and one example value, which is how to see what a sample's items hold; with `properties` it returns every value of those properties, which is what a script extracts per record. Nothing needs configuring beyond `API_KEY`; set `WIKIMEDIA_USER_AGENT` to identify your deployment to Wikidata.
+
+```bash
+curl --fail-with-body --silent --show-error \
+  -X POST http://localhost:5000/wikidata/statements \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: $API_KEY" \
+  --data '{"ids": ["Q5593"], "properties": ["P569", "P19", "P106", "P27"], "lang": "en"}'
+```
+
+**Request** — `ids`: 1 to 50 QIDs or entity URLs. `properties` (optional): property ids; omitted or empty means every property, one example each. `lang` (default `en`): the language of labels, falling back to English and then to the label shared by all languages.
+
+**Response** (abridged)
+```json
+{
+  "lang": "en",
+  "summary": false,
+  "items": [
+    {
+      "requested": "Q5593",
+      "found": true,
+      "id": "Q5593",
+      "label": "Pablo Picasso",
+      "description": "Spanish painter (1881–1973)",
+      "statements": [
+        {
+          "property": "P569", "label": "date of birth", "datatype": "time", "count": 1,
+          "values": [{"text": "1881-10-25", "rank": "normal", "time": "+1881-10-25T00:00:00Z", "precision": 11, "calendar": "gregorian"}]
+        },
+        {
+          "property": "P106", "label": "occupation", "datatype": "wikibase-item", "count": 31,
+          "values": [{"text": "painter", "rank": "normal", "id": "Q1028181", "label": "painter"}, "..."]
+        },
+        {"property": "P27", "label": "country of citizenship", "datatype": "wikibase-item", "count": 0, "values": []}
+      ]
+    }
+  ]
+}
+```
+
+- Items come back in the order asked. `id` is the item after following a redirect, so it can differ from `requested`. An id that does not exist comes back as `"found": false`, not as an error.
+- Deprecated statements are left out, and so are statements whose value is "unknown" or "no value". `count` counts the rest; preferred values come first. A property asked for that the item lacks has `count: 0`.
+- Every value has `text` (short readable text) and `rank`, plus fields by type: `id` and `label` for items, `time`, `precision` (11 day, 10 month, 9 year, 8 decade, 7 century) and `calendar` for dates, `amount`, `unit` and `unit_label` for quantities, `language` for monolingual text, `latitude` and `longitude` for coordinates. Fields without a value are omitted.
+- Qualifiers and references are not included.
+- Without `properties` the reply can be large: a famous person has hundreds of properties, most of them external identifiers (Pablo Picasso: 435, 365 of them identifiers).
+- Values are Wikidata's as they stand, errors included.
+
+Errors: `422` for a malformed item or property id, more than 50 ids or a malformed language code, `502` when Wikidata fails or does not answer.
+
+## Tests
+
+```bash
+uv run pytest
+```
+
+`tests/` runs the standalone API against canned Wikidata replies; nothing goes over the network.
