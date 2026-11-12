@@ -18,7 +18,8 @@ The host keeps the same log, with the exact commits checked out, in `/opt/echolo
 
 | Commit | Date | Author | What it adds | Where |
 |---|---|---|---|---|
-| (this file) | 2026-11-12 | andrazrepar | This changelog | `CHANGELOG.md` |
+| (this commit) | 2026-11-12 | andrazrepar | **`llm_based` through HiTZ's hosted service:** with `HITZ_API_KEY` set, each entity goes to `POST https://zerbitzuak.hitz.eus/api/reconciliation` (the Latxa pipeline of the draft, run by HiTZ) instead of the local draft and its OpenAI-compatible endpoint; same match format. A key HiTZ refuses gives 503 instead of 502. Tests with a fake HiTZ. | `reconciliation/algorithms/llm_based/__init__.py`, `standalone_api.py`, `tests/test_llm_based_hitz.py`, `README.md`, `.env.example` |
+| `d0af95e` | 2026-11-12 | andrazrepar | This changelog | `CHANGELOG.md` |
 | `eecc6a9` | 2026-11-11 | andrazrepar | **`POST /wikidata/statements`:** what Wikidata holds for up to 50 items as values a script can use. Item values come with QID and label, dates at their precision, quantities with their unit, preferred values first. Without `properties`, every property with a count and one example (exploring); with `properties`, every value of those (extracting). The first tests in this branch, with pytest as a dev dependency; a README section. | `reconciliation/enrichment/statements.py`, `models.py`, `standalone_api.py`, `tests/test_statements_api.py`, `README.md` |
 
 ## Branch `llm-and-rule-based` (not merged)

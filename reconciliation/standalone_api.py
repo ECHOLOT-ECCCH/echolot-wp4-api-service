@@ -80,6 +80,11 @@ def reconcile_entity(
 
     try:
         result = implementation.reconcile(entity)
+    except AlgorithmNotConfigured as exc:  # found only when calling, e.g. a refused key
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"Algorithm {algorithm.value} is not configured: {exc}",
+        ) from exc
     except implementation.UPSTREAM_ERRORS as exc:
         logger.exception("%s request failed for %s", algorithm.value, entity.uri)
         raise HTTPException(
