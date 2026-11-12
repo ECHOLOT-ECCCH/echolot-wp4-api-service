@@ -2,6 +2,8 @@
 
 Async HTTP API for reconciling entities against Wikidata, orchestrated with [Prefect](https://prefect.io). Three interchangeable reconciliation algorithms are available, chosen per request with `?algorithm=`.
 
+What was added when, by commit, and what is deployed: [CHANGELOG.md](CHANGELOG.md).
+
 ## Setup
 
 ```bash
