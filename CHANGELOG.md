@@ -13,8 +13,18 @@ own changelog and decision log.
 | 2026-11-12 | same | `d0af95e` | This changelog only; the running code is unchanged |
 | 2026-11-12 | same | `ce6175f` | `llm_based` through HiTZ's hosted Latxa service, with the server's own `HITZ_API_KEY` |
 | 2026-11-24 | same | `ce6175f` | The code is unchanged; the container joins the workbench's internal network `runs`, the only one its runner is on (the workbench's milestone 6) |
+| 2026-11-24 | same | `579e4f1` | From `main` after the merge: the image runs as uid 10001, not root; `API_DOCS=false` on this server, so `/docs`, `/redoc` and `/openapi.json` answer 404 |
 
 The host keeps the same log, with the exact commits checked out, in `/opt/echolot/README.md`.
+
+## `main` after the merge of 2026-11-24
+
+New work branches off `main` and is merged back into it.
+
+| Commit | Date | Author | What it adds | Where |
+|---|---|---|---|---|
+| (this commit) | 2026-11-24 | andrazrepar | The deployment of `579e4f1` recorded | `CHANGELOG.md` |
+| `579e4f1` | 2026-11-24 | andrazrepar | The merge of `feat/hardening`, and with it `feat/wikidata-statements` and `llm-and-rule-based` (pzajec agreed) | |
 
 ## Branch `feat/hardening` (merged into `main` on 2026-11-24; built on `feat/wikidata-statements`)
 
@@ -22,7 +32,7 @@ Running ECHOLOT more safely on a shared host (the workbench's milestone 6, M6.5)
 
 | Commit | Date | Author | What it adds | Where |
 |---|---|---|---|---|
-| (this commit) | 2026-11-24 | andrazrepar | The three branches marked as merged into `main`, and the hashes filled in | `CHANGELOG.md` |
+| `7266df4` | 2026-11-24 | andrazrepar | The three branches marked as merged into `main`, and the hashes filled in | `CHANGELOG.md` |
 | `20e7e93` | 2026-11-24 | andrazrepar | **The image runs as a user** (`echolot`, uid 10001), not root; it writes only to `/tmp`, and a mounted datasheet must be readable by it. **`API_DOCS=false`** turns off `/docs`, `/redoc` and `/openapi.json`, which answer without a key (on by default). | `Dockerfile`, `reconciliation/standalone_api.py`, `tests/test_api_docs.py`, `README.md`, `.env.example` |
 
 ## Branch `feat/wikidata-statements` (merged into `main` on 2026-11-24; built on `llm-and-rule-based`)
