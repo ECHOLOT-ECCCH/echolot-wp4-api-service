@@ -183,7 +183,7 @@ docker compose ps
 curl --fail http://localhost:5000/health
 ```
 
-The API documentation is available at <http://localhost:5000/docs>. View logs with `docker compose logs -f` and stop it with `docker compose down`.
+The API documentation is available at <http://localhost:5000/docs>; `API_DOCS=false` in `.env` turns it off (`/docs`, `/redoc` and `/openapi.json` answer without a key). The container runs as the user `echolot` (uid 10001), not root, so a mounted datasheet must be readable by it. View logs with `docker compose logs -f` and stop it with `docker compose down`.
 
 ### Reconcile one entity
 

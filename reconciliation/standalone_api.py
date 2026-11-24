@@ -30,7 +30,22 @@ from reconciliation.models import Entity, ReconciliationMatch
 logger = logging.getLogger(__name__)
 api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
 
-app = FastAPI(title="ECHOLOT Standalone Reconciliation API", version="0.1.0")
+
+
+def docs_enabled() -> bool:
+    """``API_DOCS=false`` turns off /docs, /redoc and /openapi.json, which answer without a key
+    (on by default; echolot.ijs.si turns them off)."""
+    return os.getenv("API_DOCS", "true").strip().lower() not in ("0", "false", "no", "off")
+
+
+_DOCS = docs_enabled()
+app = FastAPI(
+    title="ECHOLOT Standalone Reconciliation API",
+    version="0.1.0",
+    docs_url="/docs" if _DOCS else None,
+    redoc_url="/redoc" if _DOCS else None,
+    openapi_url="/openapi.json" if _DOCS else None,
+)
 
 
 class EntityResult(BaseModel):

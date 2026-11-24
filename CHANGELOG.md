@@ -16,6 +16,14 @@ own changelog and decision log.
 
 The host keeps the same log, with the exact commits checked out, in `/opt/echolot/README.md`.
 
+## Branch `feat/hardening` (not merged; builds on `feat/wikidata-statements`)
+
+Running ECHOLOT more safely on a shared host (the workbench's milestone 6, M6.5).
+
+| Commit | Date | Author | What it adds | Where |
+|---|---|---|---|---|
+| (this commit) | 2026-11-24 | andrazrepar | **The image runs as a user** (`echolot`, uid 10001), not root; it writes only to `/tmp`, and a mounted datasheet must be readable by it. **`API_DOCS=false`** turns off `/docs`, `/redoc` and `/openapi.json`, which answer without a key (on by default). | `Dockerfile`, `reconciliation/standalone_api.py`, `tests/test_api_docs.py`, `README.md`, `.env.example` |
+
 ## Branch `feat/wikidata-statements` (not merged; builds on `llm-and-rule-based`)
 
 | Commit | Date | Author | What it adds | Where |

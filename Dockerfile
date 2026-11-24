@@ -19,6 +19,11 @@ RUN apt-get update \
     && apt-get purge -y --auto-remove gcc libc6-dev \
     && rm -rf /var/lib/apt/lists/*
 COPY reconciliation ./reconciliation
+# runs as a user of its own, not root; it writes only to /tmp. Datasheets mounted for
+# rule_based must be readable by uid 10001.
+RUN python -m compileall -q reconciliation \
+    && useradd --uid 10001 --no-create-home --shell /usr/sbin/nologin echolot
+USER echolot
 
 EXPOSE 5000
 CMD ["uvicorn", "reconciliation.standalone_api:app", "--host", "0.0.0.0", "--port", "5000"]
