@@ -12,6 +12,7 @@ own changelog and decision log.
 | 2026-11-11 | https://echolot.ijs.si/service/ (in the workbench's Compose project) | `eecc6a9` | First deployment: the three algorithms (`rule_based` with the Getty ULAN table, `llm_based` through OpenRouter), `/enrich` without a server key, `/wikidata/statements` |
 | 2026-11-12 | same | `d0af95e` | This changelog only; the running code is unchanged |
 | 2026-11-12 | same | `ce6175f` | `llm_based` through HiTZ's hosted Latxa service, with the server's own `HITZ_API_KEY` |
+| 2026-11-24 | same | `ce6175f` | The code is unchanged; the container joins the workbench's internal network `runs`, the only one its runner is on (the workbench's milestone 6) |
 
 The host keeps the same log, with the exact commits checked out, in `/opt/echolot/README.md`.
 
