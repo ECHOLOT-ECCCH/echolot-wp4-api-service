@@ -16,24 +16,26 @@ own changelog and decision log.
 
 The host keeps the same log, with the exact commits checked out, in `/opt/echolot/README.md`.
 
-## Branch `feat/hardening` (not merged; builds on `feat/wikidata-statements`)
+## Branch `feat/hardening` (merged into `main` on 2026-11-24; built on `feat/wikidata-statements`)
 
 Running ECHOLOT more safely on a shared host (the workbench's milestone 6, M6.5).
 
 | Commit | Date | Author | What it adds | Where |
 |---|---|---|---|---|
-| (this commit) | 2026-11-24 | andrazrepar | **The image runs as a user** (`echolot`, uid 10001), not root; it writes only to `/tmp`, and a mounted datasheet must be readable by it. **`API_DOCS=false`** turns off `/docs`, `/redoc` and `/openapi.json`, which answer without a key (on by default). | `Dockerfile`, `reconciliation/standalone_api.py`, `tests/test_api_docs.py`, `README.md`, `.env.example` |
+| (this commit) | 2026-11-24 | andrazrepar | The three branches marked as merged into `main`, and the hashes filled in | `CHANGELOG.md` |
+| `20e7e93` | 2026-11-24 | andrazrepar | **The image runs as a user** (`echolot`, uid 10001), not root; it writes only to `/tmp`, and a mounted datasheet must be readable by it. **`API_DOCS=false`** turns off `/docs`, `/redoc` and `/openapi.json`, which answer without a key (on by default). | `Dockerfile`, `reconciliation/standalone_api.py`, `tests/test_api_docs.py`, `README.md`, `.env.example` |
 
-## Branch `feat/wikidata-statements` (not merged; builds on `llm-and-rule-based`)
+## Branch `feat/wikidata-statements` (merged into `main` on 2026-11-24; built on `llm-and-rule-based`)
 
 | Commit | Date | Author | What it adds | Where |
 |---|---|---|---|---|
-| (this commit) | 2026-11-12 | andrazrepar | The deployment of `ce6175f` recorded, and its hash filled in below | `CHANGELOG.md` |
+| `b2593a4` | 2026-11-24 | andrazrepar | The 2026-11-24 deployment recorded (the container on the workbench's runner network) | `CHANGELOG.md` |
+| `8f9d2f4` | 2026-11-12 | andrazrepar | The deployment of `ce6175f` recorded, and its hash filled in below | `CHANGELOG.md` |
 | `ce6175f` | 2026-11-12 | andrazrepar | **`llm_based` through HiTZ's hosted service:** with `HITZ_API_KEY` set, each entity goes to `POST https://zerbitzuak.hitz.eus/api/reconciliation` (the Latxa pipeline of the draft, run by HiTZ) instead of the local draft and its OpenAI-compatible endpoint; same match format. A key HiTZ refuses gives 503 instead of 502. Tests with a fake HiTZ. | `reconciliation/algorithms/llm_based/__init__.py`, `standalone_api.py`, `tests/test_llm_based_hitz.py`, `README.md`, `.env.example` |
 | `d0af95e` | 2026-11-12 | andrazrepar | This changelog | `CHANGELOG.md` |
 | `eecc6a9` | 2026-11-11 | andrazrepar | **`POST /wikidata/statements`:** what Wikidata holds for up to 50 items as values a script can use. Item values come with QID and label, dates at their precision, quantities with their unit, preferred values first. Without `properties`, every property with a count and one example (exploring); with `properties`, every value of those (extracting). The first tests in this branch, with pytest as a dev dependency; a README section. | `reconciliation/enrichment/statements.py`, `models.py`, `standalone_api.py`, `tests/test_statements_api.py`, `README.md` |
 
-## Branch `llm-and-rule-based` (not merged)
+## Branch `llm-and-rule-based` (merged into `main` on 2026-11-24, with pzajec's agreement)
 
 | Commit | Date | Author | What it adds |
 |---|---|---|---|
