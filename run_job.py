@@ -2,11 +2,12 @@
 Submit a reconciliation job, poll until done, save result to JSON.
 
 Usage:
-    python run_job.py [input.json] [output.json]
+    python run_job.py [input.json] [output.json] [algorithm]
 
 Defaults:
-    input  → examples/in.json
-    output → out.json
+    input     → examples/in.json
+    output    → out.json
+    algorithm → wikifier (or llm_based, rule_based)
 """
 
 import json
@@ -21,11 +22,13 @@ POLL_INTERVAL = 3  # seconds between status checks
 TERMINAL_STATUSES = {"COMPLETED", "FAILED", "CRASHED"}
 
 
-def main(input_path: Path, output_path: Path) -> None:
+def main(input_path: Path, output_path: Path, algorithm: str) -> None:
     payload = json.loads(input_path.read_text())
 
-    print(f"Submitting {len(payload['entities'])} entit(ies) from {input_path} ...")
-    response = httpx.post(f"{API_BASE}/reconcile", json=payload, timeout=10)
+    print(f"Submitting {len(payload['entities'])} entit(ies) from {input_path} to {algorithm} ...")
+    response = httpx.post(
+        f"{API_BASE}/reconcile", params={"algorithm": algorithm}, json=payload, timeout=10
+    )
     response.raise_for_status()
 
     job = response.json()
@@ -58,4 +61,5 @@ def main(input_path: Path, output_path: Path) -> None:
 if __name__ == "__main__":
     input_path = Path(sys.argv[1]) if len(sys.argv) > 1 else Path("examples/in.json")
     output_path = Path(sys.argv[2]) if len(sys.argv) > 2 else Path("out.json")
-    main(input_path, output_path)
+    algorithm = sys.argv[3] if len(sys.argv) > 3 else "wikifier"
+    main(input_path, output_path, algorithm)

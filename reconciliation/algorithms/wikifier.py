@@ -3,12 +3,22 @@ import os
 import re
 import urllib.parse
 import urllib.request
+from urllib.error import URLError
 
 from dotenv import load_dotenv
 
+from reconciliation.algorithms import AlgorithmNotConfigured
 from reconciliation.models import Entity, ReconciliationMatch, ReconciliationResult
 
 load_dotenv()
+
+# Network failures and malformed responses from wikifier.org.
+UPSTREAM_ERRORS = (TimeoutError, URLError, json.JSONDecodeError, KeyError)
+
+
+def check_configured() -> None:
+    if not os.getenv("WIKIFIER_API_KEY"):
+        raise AlgorithmNotConfigured("WIKIFIER_API_KEY is not set")
 
 
 def reconcile(entity: Entity) -> ReconciliationResult:

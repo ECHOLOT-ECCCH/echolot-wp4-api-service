@@ -5,6 +5,10 @@ services:
       - "5000:5000"
     env_file:
       - .env
+    # For the rule_based algorithm, mount the datasheets and point
+    # RULE_BASED_TARGET_FILE at one in .env, e.g. /data/ulan.tsv
+    # volumes:
+    #   - ./draft/rule_based/datasheets:/data:ro
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000/health', timeout=2)"]

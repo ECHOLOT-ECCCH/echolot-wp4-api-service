@@ -2,27 +2,55 @@ import json
 import logging
 import os
 import secrets
+from typing import Annotated
 from urllib.error import URLError
 
-from fastapi import FastAPI, HTTPException, Security, status
+from fastapi import FastAPI, HTTPException, Query, Security, status
 from fastapi.security import APIKeyHeader
 from pydantic import BaseModel
 
-from reconciliation.algorithms.wikifier import reconcile
+from reconciliation.algorithms import (
+    DEFAULT_ALGORITHM,
+    AlgorithmName,
+    AlgorithmNotConfigured,
+    get_algorithm,
+)
 from reconciliation.enrichment.llm import LLMError, LLMNotConfigured, get_provider
-from reconciliation.enrichment.models import EnrichmentRequest, EnrichmentResult
+from reconciliation.enrichment.models import (
+    EnrichmentRequest,
+    EnrichmentResult,
+    StatementsRequest,
+    StatementsResult,
+)
 from reconciliation.enrichment.service import enrich
+from reconciliation.enrichment.statements import statements
 from reconciliation.enrichment.wikimedia import NotFound, UpstreamError
 from reconciliation.models import Entity, ReconciliationMatch
 
 logger = logging.getLogger(__name__)
 api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
 
-app = FastAPI(title="ECHOLOT Standalone Reconciliation API", version="0.1.0")
+
+
+def docs_enabled() -> bool:
+    """``API_DOCS=false`` turns off /docs, /redoc and /openapi.json, which answer without a key
+    (on by default; echolot.ijs.si turns them off)."""
+    return os.getenv("API_DOCS", "true").strip().lower() not in ("0", "false", "no", "off")
+
+
+_DOCS = docs_enabled()
+app = FastAPI(
+    title="ECHOLOT Standalone Reconciliation API",
+    version="0.1.0",
+    docs_url="/docs" if _DOCS else None,
+    redoc_url="/redoc" if _DOCS else None,
+    openapi_url="/openapi.json" if _DOCS else None,
+)
 
 
 class EntityResult(BaseModel):
     uri: str
+    algorithm: AlgorithmName
     matches: list[ReconciliationMatch]
 
 
@@ -50,23 +78,36 @@ def health() -> dict[str, str]:
     response_model=EntityResult,
     dependencies=[Security(require_api_key)],
 )
-def reconcile_entity(entity: Entity) -> EntityResult:
-    if not os.getenv("WIKIFIER_API_KEY"):
+def reconcile_entity(
+    entity: Entity,
+    algorithm: Annotated[
+        AlgorithmName, Query(description="Reconciliation approach to run")
+    ] = DEFAULT_ALGORITHM,
+) -> EntityResult:
+    implementation = get_algorithm(algorithm)
+    try:
+        implementation.check_configured()
+    except AlgorithmNotConfigured as exc:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Wikifier API key is not configured",
-        )
+            detail=f"Algorithm {algorithm.value} is not configured: {exc}",
+        ) from exc
 
     try:
-        result = reconcile(entity)
-    except (TimeoutError, URLError, json.JSONDecodeError, KeyError) as exc:
-        logger.exception("Wikifier request failed for %s", entity.uri)
+        result = implementation.reconcile(entity)
+    except AlgorithmNotConfigured as exc:  # found only when calling, e.g. a refused key
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"Algorithm {algorithm.value} is not configured: {exc}",
+        ) from exc
+    except implementation.UPSTREAM_ERRORS as exc:
+        logger.exception("%s request failed for %s", algorithm.value, entity.uri)
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail="Reconciliation service request failed",
         ) from exc
 
-    return EntityResult(uri=entity.uri, matches=result.matches)
+    return EntityResult(uri=entity.uri, algorithm=algorithm, matches=result.matches)
 
 
 @app.post(
@@ -100,4 +141,23 @@ def enrich_entity(request: EnrichmentRequest) -> EnrichmentResult:
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail="Wikidata or Wikipedia request failed",
+        ) from exc
+
+
+@app.post(
+    "/wikidata/statements",
+    response_model=StatementsResult,
+    response_model_exclude_none=True,
+    dependencies=[Security(require_api_key)],
+)
+def wikidata_statements(request: StatementsRequest) -> StatementsResult:
+    try:
+        return statements(request)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)) from exc
+    except (TimeoutError, URLError, UpstreamError, json.JSONDecodeError, KeyError) as exc:
+        logger.exception("Wikidata request failed for %s", request.ids)
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail="Wikidata request failed",
         ) from exc
